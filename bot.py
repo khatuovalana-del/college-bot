@@ -16,6 +16,8 @@ dp = Dispatcher()
 
 # ===== ЗВОНКИ =====
 TIME = ["9:00–10:00", "10:05–11:05", "11:20–12:20", "12:25–13:25"]
+TIME_SHORT = ["9:00", "10:05", "11:20", "12:25"]
+PAIR_EMOJI = ["🕘", "🕙", "🕚", "🕛"]
 
 # ===== ЧИСЛИТЕЛЬ И ЗНАМЕНАТЕЛЬ =====
 NUMERATOR = [
@@ -34,7 +36,6 @@ DENOMINATOR = [
 ]
 
 def get_week_type(target_date=None):
-    """Определяет числитель/знаменатель для указанной даты (по умолчанию — сегодня)."""
     today = target_date if target_date else date.today()
     for start, end in NUMERATOR:
         if datetime.strptime(start, "%Y-%m-%d").date() <= today <= datetime.strptime(end, "%Y-%m-%d").date():
@@ -45,11 +46,9 @@ def get_week_type(target_date=None):
     return None
 
 def get_actual_date():
-    """Если сегодня пятница, суббота или воскресенье — берём дату следующей недели."""
     today = date.today()
-    # weekday(): Пн=0, Вт=1, Ср=2, Чт=3, Пт=4, Сб=5, Вс=6
     if today.weekday() >= 4:  # Пт, Сб, Вс
-        days_to_monday = 7 - today.weekday()  # сколько дней до понедельника
+        days_to_monday = 7 - today.weekday()
         return today + timedelta(days=days_to_monday)
     return today
 
@@ -146,12 +145,32 @@ SCHEDULE = {
 
 DAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"]
 
-def faculty_kb():
+# ===== ЗВОНКИ С ПЕРЕМЕНАМИ =====
+def get_bells_text():
+    text = "━━━━━━━━━━━━━━━━━━\n"
+    text += "🔔 <b>РАСПИСАНИЕ ЗВОНКОВ</b>\n"
+    text += "<i>(1 смена)</i>\n"
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
+    text += "🕘 <b>1 пара:</b> 9:00 – 10:00\n"
+    text += "☕ Перемена: 10:00 – 10:05 <i>(5 мин)</i>\n\n"
+    text += "🕙 <b>2 пара:</b> 10:05 – 11:05\n"
+    text += "🍽 Перемена: 11:05 – 11:20 <i>(15 мин)</i>\n"
+    text += "    <b>Пора перекусить!</b> 😋\n\n"
+    text += "🕚 <b>3 пара:</b> 11:20 – 12:20\n"
+    text += "☕ Перемена: 12:20 – 12:25 <i>(5 мин)</i>\n\n"
+    text += "🕛 <b>4 пара:</b> 12:25 – 13:25\n"
+    text += "\n━━━━━━━━━━━━━━━━━━\n"
+    text += "🎉 Учебный день закончен!"
+    return text
+
+# ===== КНОПКИ =====
+def main_menu_kb():
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(text="⚙️ Операторы", callback_data="fac:Операторы"))
     builder.add(InlineKeyboardButton(text="⚖️ Юриспруденция", callback_data="fac:Юриспруденция"))
     builder.add(InlineKeyboardButton(text="🩺 Медицинский — 1 группа", callback_data="fac:Медицинский — 1 группа"))
     builder.add(InlineKeyboardButton(text="🩺 Медицинский — 2 группа", callback_data="fac:Медицинский — 2 группа"))
+    builder.add(InlineKeyboardButton(text="🔔 Звонки", callback_data="bells"))
     builder.adjust(1)
     return builder.as_markup()
 
@@ -160,10 +179,11 @@ def days_kb(faculty):
     for i, day in enumerate(DAYS):
         builder.add(InlineKeyboardButton(text=day, callback_data=f"day:{faculty}:{i}"))
     builder.add(InlineKeyboardButton(text="📅 Вся неделя", callback_data=f"week:{faculty}"))
-    builder.add(InlineKeyboardButton(text="🔙 Сменить факультет", callback_data="back"))
+    builder.add(InlineKeyboardButton(text="🏠 В главное меню", callback_data="back"))
     builder.adjust(2, 2, 1, 1, 1)
     return builder.as_markup()
 
+# ===== ВЫВОД =====
 def format_pair(pair_tuple, week_type):
     if len(pair_tuple) == 1:
         return pair_tuple[0]
@@ -182,33 +202,73 @@ def format_pair(pair_tuple, week_type):
 def format_day(faculty, day_index):
     week_type = get_week_type(get_actual_date())
     pairs = SCHEDULE[faculty][day_index]
-    text = f"📚 <b>{faculty}</b>\n📅 <b>{DAYS[day_index]}</b>\n"
+    text = "━━━━━━━━━━━━━━━━━━\n"
+    text += f"📚 <b>{faculty.upper()}</b>\n"
     if week_type:
-        text += f"🗓 <i>Неделя: {week_type}</i>\n"
-    text += "\n"
+        text += f"📅 {DAYS[day_index]} · <i>{week_type}</i>\n"
+    else:
+        text += f"📅 {DAYS[day_index]}\n"
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
     has_pairs = False
     for i, pair in enumerate(pairs):
         subject = format_pair(pair, week_type)
         if subject == "-":
             continue
         has_pairs = True
-        text += f"<b>{i+1} пара</b> ({TIME[i]}): {subject}\n"
+        text += f"{PAIR_EMOJI[i]} <b>{TIME[i]}</b>\n"
+        text += f"     {subject}\n\n"
     if not has_pairs:
-        text += "Пар нет 🎉"
+        text += "🎉 <b>УРА, ПАР НЕТ!</b>\n\n"
+        text += "Отдыхай, гуляй, набирайся сил! 😊"
+    else:
+        text += "━━━━━━━━━━━━━━━━━━\n"
+        text += "💡 Нажми на другой день, чтобы посмотреть ещё."
     return text
 
+def format_week(faculty):
+    week_type = get_week_type(get_actual_date())
+    text = "━━━━━━━━━━━━━━━━━━\n"
+    text += f"📚 <b>{faculty.upper()}</b>\n"
+    if week_type:
+        text += f"🗓 Неделя: <i>{week_type}</i>\n"
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
+    for d in range(5):
+        text += f"📅 <b>{DAYS[d]}</b>\n"
+        has_pairs = False
+        for i, pair in enumerate(SCHEDULE[faculty][d]):
+            subject = format_pair(pair, week_type)
+            if subject == "-":
+                continue
+            has_pairs = True
+            text += f"  {PAIR_EMOJI[i]} {TIME_SHORT[i]} — {subject}\n"
+        if not has_pairs:
+            text += "  🎉 Пар нет\n"
+        text += "\n"
+    text += "━━━━━━━━━━━━━━━━━━"
+    return text
+
+# ===== ОБРАБОТЧИКИ =====
 @dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer(
-        "Привет! 👋\nЯ помощник студента колледжа.\nВыбери свой факультет:",
-        reply_markup=faculty_kb()
+        "━━━━━━━━━━━━━━━━━━\n"
+        "🎓 <b>ДОБРО ПОЖАЛОВАТЬ!</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "Я — помощник студента колледжа.\n"
+        "Помогу узнать расписание пар.\n\n"
+        "Выбери свой факультет 👇",
+        reply_markup=main_menu_kb(),
+        parse_mode="HTML"
     )
 
 @dp.callback_query(F.data.startswith("fac:"))
 async def choose_faculty(call: types.CallbackQuery):
     faculty = call.data.split(":", 1)[1]
     await call.message.edit_text(
-        f"Ты выбрал: <b>{faculty}</b>\nВыбери день недели:",
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"📚 <b>{faculty.upper()}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"Выбери день недели 👇",
         reply_markup=days_kb(faculty), parse_mode="HTML"
     )
 
@@ -223,24 +283,27 @@ async def show_day(call: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("week:"))
 async def show_week(call: types.CallbackQuery):
     faculty = call.data.split(":", 1)[1]
-    week_type = get_week_type(get_actual_date())
-    text = f"📚 <b>{faculty}</b> — расписание на неделю\n"
-    if week_type:
-        text += f"🗓 <i>Неделя: {week_type}</i>\n"
-    text += "\n"
-    for d in range(5):
-        text += f"📅 <b>{DAYS[d]}</b>\n"
-        for i, pair in enumerate(SCHEDULE[faculty][d]):
-            subject = format_pair(pair, week_type)
-            if subject == "-":
-                continue
-            text += f"  {i+1}. {TIME[i]} — {subject}\n"
-        text += "\n"
+    text = format_week(faculty)
     await call.message.edit_text(text, reply_markup=days_kb(faculty), parse_mode="HTML")
+
+@dp.callback_query(F.data == "bells")
+async def show_bells(call: types.CallbackQuery):
+    await call.message.edit_text(
+        get_bells_text(),
+        reply_markup=main_menu_kb(),
+        parse_mode="HTML"
+    )
 
 @dp.callback_query(F.data == "back")
 async def back(call: types.CallbackQuery):
-    await call.message.edit_text("Выбери факультет:", reply_markup=faculty_kb())
+    await call.message.edit_text(
+        "━━━━━━━━━━━━━━━━━━\n"
+        "🎓 <b>ГЛАВНОЕ МЕНЮ</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "Выбери свой факультет 👇",
+        reply_markup=main_menu_kb(),
+        parse_mode="HTML"
+    )
 
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
