@@ -1,7 +1,7 @@
 import logging
 import asyncio
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -33,8 +33,9 @@ DENOMINATOR = [
     ("2026-11-30", "2026-12-04"), ("2026-12-14", "2026-12-18"),
 ]
 
-def get_week_type():
-    today = date.today()
+def get_week_type(target_date=None):
+    """Определяет числитель/знаменатель для указанной даты (по умолчанию — сегодня)."""
+    today = target_date if target_date else date.today()
     for start, end in NUMERATOR:
         if datetime.strptime(start, "%Y-%m-%d").date() <= today <= datetime.strptime(end, "%Y-%m-%d").date():
             return "числитель"
@@ -42,6 +43,15 @@ def get_week_type():
         if datetime.strptime(start, "%Y-%m-%d").date() <= today <= datetime.strptime(end, "%Y-%m-%d").date():
             return "знаменатель"
     return None
+
+def get_actual_date():
+    """Если сегодня пятница, суббота или воскресенье — берём дату следующей недели."""
+    today = date.today()
+    # weekday(): Пн=0, Вт=1, Ср=2, Чт=3, Пт=4, Сб=5, Вс=6
+    if today.weekday() >= 4:  # Пт, Сб, Вс
+        days_to_monday = 7 - today.weekday()  # сколько дней до понедельника
+        return today + timedelta(days=days_to_monday)
+    return today
 
 # ===== РАСПИСАНИЕ =====
 SCHEDULE = {
@@ -170,7 +180,7 @@ def format_pair(pair_tuple, week_type):
         return f"{num} / {den}"
 
 def format_day(faculty, day_index):
-    week_type = get_week_type()
+    week_type = get_week_type(get_actual_date())
     pairs = SCHEDULE[faculty][day_index]
     text = f"📚 <b>{faculty}</b>\n📅 <b>{DAYS[day_index]}</b>\n"
     if week_type:
@@ -213,7 +223,7 @@ async def show_day(call: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("week:"))
 async def show_week(call: types.CallbackQuery):
     faculty = call.data.split(":", 1)[1]
-    week_type = get_week_type()
+    week_type = get_week_type(get_actual_date())
     text = f"📚 <b>{faculty}</b> — расписание на неделю\n"
     if week_type:
         text += f"🗓 <i>Неделя: {week_type}</i>\n"
