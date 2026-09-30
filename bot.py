@@ -52,6 +52,44 @@ def get_actual_date():
         return today + timedelta(days=days_to_monday)
     return today
 
+# ===== АТТЕСТАЦИЯ =====
+ATTESTATION_PERIODS = [
+    ("2026-10-26", "2026-10-30", "текущая аттестация"),
+    ("2026-12-21", "2026-12-25", "промежуточная аттестация (сессия)"),
+]
+
+def get_attestation():
+    """Если сейчас идёт аттестация — возвращает её название, иначе None."""
+    today = date.today()
+    for start, end, name in ATTESTATION_PERIODS:
+        if datetime.strptime(start, "%Y-%m-%d").date() <= today <= datetime.strptime(end, "%Y-%m-%d").date():
+            return name
+    return None
+
+def get_attestation_warning():
+    """Возвращает строку-предупреждение, если идёт аттестация."""
+    name = get_attestation()
+    if name:
+        return f"⚠️ <b>Сейчас идёт {name}!</b>\n\n"
+    return ""
+
+# ===== УЧЕБНЫЙ КАЛЕНДАРЬ =====
+def get_calendar_text():
+    text = "━━━━━━━━━━━━━━━━━━\n"
+    text += "📅 <b>УЧЕБНЫЙ КАЛЕНДАРЬ</b>\n"
+    text += "<i>2026–2027 уч. год · 1 полугодие</i>\n"
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
+    text += "📚 <b>Теоретическое обучение</b>\n"
+    text += "   01.09 – 25.12.2026\n\n"
+    text += "📝 <b>Текущая аттестация</b>\n"
+    text += "   26.10 – 30.10.2026\n\n"
+    text += "📝 <b>Промежуточная аттестация (сессия)</b>\n"
+    text += "   21.12 – 25.12.2026\n\n"
+    text += "🏖 <b>Каникулы</b>\n"
+    text += "   28.12.2026 – 10.01.2027\n"
+    text += "\n━━━━━━━━━━━━━━━━━━"
+    return text
+
 # ===== РАСПИСАНИЕ =====
 SCHEDULE = {
     "Юриспруденция": {
@@ -145,7 +183,7 @@ SCHEDULE = {
 
 DAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"]
 
-# ===== ЗВОНКИ С ПЕРЕМЕНАМИ =====
+# ===== ЗВОНКИ =====
 def get_bells_text():
     text = "━━━━━━━━━━━━━━━━━━\n"
     text += "🔔 <b>РАСПИСАНИЕ ЗВОНКОВ</b>\n"
@@ -171,6 +209,7 @@ def main_menu_kb():
     builder.add(InlineKeyboardButton(text="🩺 Медицинский — 1 группа", callback_data="fac:Медицинский — 1 группа"))
     builder.add(InlineKeyboardButton(text="🩺 Медицинский — 2 группа", callback_data="fac:Медицинский — 2 группа"))
     builder.add(InlineKeyboardButton(text="🔔 Звонки", callback_data="bells"))
+    builder.add(InlineKeyboardButton(text="📅 Календарь", callback_data="calendar"))
     builder.adjust(1)
     return builder.as_markup()
 
@@ -202,7 +241,8 @@ def format_pair(pair_tuple, week_type):
 def format_day(faculty, day_index):
     week_type = get_week_type(get_actual_date())
     pairs = SCHEDULE[faculty][day_index]
-    text = "━━━━━━━━━━━━━━━━━━\n"
+    text = get_attestation_warning()  # предупреждение об аттестации
+    text += "━━━━━━━━━━━━━━━━━━\n"
     text += f"📚 <b>{faculty.upper()}</b>\n"
     if week_type:
         text += f"📅 {DAYS[day_index]} · <i>{week_type}</i>\n"
@@ -227,7 +267,8 @@ def format_day(faculty, day_index):
 
 def format_week(faculty):
     week_type = get_week_type(get_actual_date())
-    text = "━━━━━━━━━━━━━━━━━━\n"
+    text = get_attestation_warning()
+    text += "━━━━━━━━━━━━━━━━━━\n"
     text += f"📚 <b>{faculty.upper()}</b>\n"
     if week_type:
         text += f"🗓 Неделя: <i>{week_type}</i>\n"
@@ -250,27 +291,24 @@ def format_week(faculty):
 # ===== ОБРАБОТЧИКИ =====
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer(
-        "━━━━━━━━━━━━━━━━━━\n"
-        "🎓 <b>ДОБРО ПОЖАЛОВАТЬ!</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
-        "Я — помощник студента колледжа.\n"
-        "Помогу узнать расписание пар.\n\n"
-        "Выбери свой факультет 👇",
-        reply_markup=main_menu_kb(),
-        parse_mode="HTML"
-    )
+    text = get_attestation_warning()
+    text += "━━━━━━━━━━━━━━━━━━\n"
+    text += "🎓 <b>ДОБРО ПОЖАЛОВАТЬ!</b>\n"
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
+    text += "Я — помощник студента колледжа.\n"
+    text += "Помогу узнать расписание пар.\n\n"
+    text += "Выбери свой факультет 👇"
+    await message.answer(text, reply_markup=main_menu_kb(), parse_mode="HTML")
 
 @dp.callback_query(F.data.startswith("fac:"))
 async def choose_faculty(call: types.CallbackQuery):
     faculty = call.data.split(":", 1)[1]
-    await call.message.edit_text(
-        f"━━━━━━━━━━━━━━━━━━\n"
-        f"📚 <b>{faculty.upper()}</b>\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"Выбери день недели 👇",
-        reply_markup=days_kb(faculty), parse_mode="HTML"
-    )
+    text = get_attestation_warning()
+    text += "━━━━━━━━━━━━━━━━━━\n"
+    text += f"📚 <b>{faculty.upper()}</b>\n"
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
+    text += "Выбери день недели 👇"
+    await call.message.edit_text(text, reply_markup=days_kb(faculty), parse_mode="HTML")
 
 @dp.callback_query(F.data.startswith("day:"))
 async def show_day(call: types.CallbackQuery):
@@ -294,16 +332,22 @@ async def show_bells(call: types.CallbackQuery):
         parse_mode="HTML"
     )
 
-@dp.callback_query(F.data == "back")
-async def back(call: types.CallbackQuery):
+@dp.callback_query(F.data == "calendar")
+async def show_calendar(call: types.CallbackQuery):
     await call.message.edit_text(
-        "━━━━━━━━━━━━━━━━━━\n"
-        "🎓 <b>ГЛАВНОЕ МЕНЮ</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
-        "Выбери свой факультет 👇",
+        get_calendar_text(),
         reply_markup=main_menu_kb(),
         parse_mode="HTML"
     )
+
+@dp.callback_query(F.data == "back")
+async def back(call: types.CallbackQuery):
+    text = get_attestation_warning()
+    text += "━━━━━━━━━━━━━━━━━━\n"
+    text += "🎓 <b>ГЛАВНОЕ МЕНЮ</b>\n"
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
+    text += "Выбери свой факультет 👇"
+    await call.message.edit_text(text, reply_markup=main_menu_kb(), parse_mode="HTML")
 
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
